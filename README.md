@@ -44,6 +44,28 @@ pip install -r requirements.txt
 
 ---
 
+## Features
+
+### Priority-ranked scheduling
+Tasks are sorted into a ranked order before the plan is built: required tasks always go first, then high → medium → low priority. The scheduler uses a greedy algorithm that walks the ranked list and adds each task to the plan only if it fits within the owner's available time — required tasks bypass the time check entirely so they are never dropped.
+
+### Time-slot sorting
+`Scheduler.sort_tasks_by_time()` returns any task list sorted into chronological HH:MM order using a stable lambda sort. The Streamlit UI calls this before rendering the task table so a pet owner always sees their day in time order regardless of the order tasks were entered.
+
+### Conflict detection
+`Scheduler.detect_time_conflicts()` scans every pet's tasks and groups them by their scheduled time. If two or more tasks share the same HH:MM slot — whether for the same pet or across different pets — it returns a plain-English warning string for each conflict. The UI surfaces each warning as its own `st.warning` banner so nothing gets buried.
+
+### Daily and weekly recurrence
+`CareTask` carries a `frequency` field (`"once"`, `"daily"`, or `"weekly"`) and a `due_date`. Calling `CareTask.create_next_occurrence()` returns a fresh task with the due date advanced by 1 day (daily) or 7 days (weekly). `Scheduler.mark_task_complete()` wires this together: it marks the task done and immediately appends the next occurrence to the pet's task list so recurring care is never forgotten.
+
+### Task filtering
+`Scheduler.filter_tasks()` accepts an optional completion flag and an optional pet name. It walks all pets on the owner and returns only the tasks that match both filters, making it easy to show "what's still pending for Mochi today" without touching unrelated data.
+
+### Plan validity invariants
+`DailyPlan.is_valid_plan()` enforces two correctness rules at any point in time: total scheduled time must not exceed available minutes, and no required task may appear in the skipped list. Both the test suite and the UI rely on this single method as the authoritative correctness check.
+
+---
+
 ## Smarter Scheduling
 
 Beyond the core plan generator, `pawpal_system.py` includes several features that make the scheduler more realistic and robust.
@@ -115,3 +137,8 @@ The tests also caught a real bug during development: `DailyPlan.add_item()` was 
 5 stars
 
 The scheduler's core logic (priority ranking, greedy selection, recurrence, sorting, filtering, and conflict detection) is fully covered by deterministic unit tests passing at 22/22. The star deduction reflects two gaps that remain: the Streamlit UI layer has no automated tests (UI behavior requires manual verification), and the scheduler assumes owners supply feasible required-task sets; if required tasks alone exceed available time, the plan technically becomes invalid but is still generated without a user-facing warning.
+
+
+## Demo
+
+![PawPal+ demo screenshot](assets/demo/pawpal-demo.png)

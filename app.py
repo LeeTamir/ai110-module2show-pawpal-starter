@@ -71,7 +71,7 @@ st.session_state.pet.species = species
 st.markdown("### Tasks")
 st.caption("Add tasks to your current pet using your backend class methods.")
 
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3, col4, col5 = st.columns(5)
 with col1:
     task_title = st.text_input("Task title", value="Morning walk")
 with col2:
@@ -79,6 +79,8 @@ with col2:
 with col3:
     priority = st.selectbox("Priority", ["low", "medium", "high"], index=2)
 with col4:
+    task_time = st.text_input("Time (HH:MM)", value="09:00")
+with col5:
     required = st.checkbox("Required", value=False)
 
 if st.button("Add task"):
@@ -87,25 +89,40 @@ if st.button("Add task"):
         category="general",
         duration_minutes=int(duration),
         priority=priority,
+        time=task_time,
         required=required,
     )
     st.session_state.pet.add_task(task)
-    st.success(f"Added task '{task_title}' to {st.session_state.pet.name}.")
+    st.success(f"Added **{task_title}** to {st.session_state.pet.name} at {task_time}.")
 
 pet_tasks = st.session_state.pet.get_tasks()
 if pet_tasks:
-    st.write("Current tasks:")
+    scheduler = st.session_state.scheduler
+    sorted_tasks = scheduler.sort_tasks_by_time(pet_tasks)
+
+    st.write(f"**{st.session_state.pet.name}'s tasks** (sorted by time):")
+    _priority_icon = {"high": "🔴", "medium": "🟡", "low": "🟢"}
     st.table(
         [
             {
-                "title": task.title,
-                "duration_minutes": task.duration_minutes,
-                "priority": task.priority,
-                "required": task.required,
+                "time": task.time,
+                "task": task.title,
+                "duration (min)": task.duration_minutes,
+                "priority": _priority_icon.get(task.priority, "") + " " + task.priority,
+                "required": "✅" if task.required else "",
             }
-            for task in pet_tasks
+            for task in sorted_tasks
         ]
     )
+
+    # Conflict detection — show one banner per conflict found.
+    conflicts = scheduler.detect_time_conflicts(st.session_state.owner)
+    if conflicts:
+        st.markdown("**⚠️ Scheduling conflicts detected:**")
+        for warning in conflicts:
+            st.warning(warning)
+    else:
+        st.success("No time conflicts found.")
 else:
     st.info("No tasks yet. Add one above.")
 
@@ -129,15 +146,21 @@ if "generated_plan" in st.session_state:
     plan = st.session_state.generated_plan
     st.markdown("### Today's Schedule")
 
+    time_used = plan.available_minutes - plan.remaining_minutes()
+    time_total = plan.available_minutes
+    utilization = time_used / time_total if time_total > 0 else 0
+
     if plan.items:
+        st.success(f"Scheduled {len(plan.items)} task(s) for {st.session_state.pet.name}.")
+        _priority_icon = {"high": "🔴", "medium": "🟡", "low": "🟢"}
         st.table(
             [
                 {
-                    "time": f"{item.start_time}-{item.end_time}",
+                    "time slot": f"{item.start_time} – {item.end_time}",
                     "task": item.task.title,
-                    "duration_minutes": item.task.duration_minutes,
-                    "priority": item.task.priority,
-                    "reason": item.reason,
+                    "duration (min)": item.task.duration_minutes,
+                    "priority": _priority_icon.get(item.task.priority, "") + " " + item.task.priority,
+                    "why scheduled": item.reason,
                 }
                 for item in plan.items
             ]
@@ -146,19 +169,28 @@ if "generated_plan" in st.session_state:
         st.info("No tasks were scheduled.")
 
     if plan.skipped_tasks:
-        st.markdown("#### Skipped Tasks")
-        st.table(
-            [
-                {
-                    "task": task.title,
-                    "duration_minutes": task.duration_minutes,
-                    "priority": task.priority,
-                    "required": task.required,
-                }
-                for task in plan.skipped_tasks
-            ]
-        )
+        with st.expander(f"⚠️ {len(plan.skipped_tasks)} task(s) skipped — not enough time", expanded=True):
+            st.warning(
+                "The following tasks did not fit within the available time. "
+                "Consider increasing your daily time or marking fewer tasks as optional."
+            )
+            st.table(
+                [
+                    {
+                        "task": task.title,
+                        "duration (min)": task.duration_minutes,
+                        "priority": task.priority,
+                    }
+                    for task in plan.skipped_tasks
+                ]
+            )
 
-    st.caption(
-        f"Time used: {plan.available_minutes - plan.remaining_minutes()} / {plan.available_minutes} minutes"
-    )
+    st.divider()
+    st.caption(f"Time used: {time_used} / {time_total} minutes")
+    st.progress(min(utilization, 1.0))
+    if utilization >= 1.0:
+        st.warning("You've used all available time. Required tasks may exceed the limit.")
+    elif utilization >= 0.8:
+        st.info("Your day is nearly full. There's little room for unplanned tasks.")
+    else:
+        st.success(f"{plan.remaining_minutes()} minutes still available today.")
