@@ -81,3 +81,37 @@ This removes the need for the owner to manually re-enter repeating tasks.
 - No required task appears in the skipped list.
 
 This gives both the UI and tests a single method to call for a correctness check.
+
+---
+
+## Testing PawPal+
+
+### Running the tests
+
+All 22 tests should pass. To run the full suite silently:
+
+```bash
+python -m pytest
+```
+
+### What the tests cover
+
+Tests are organized into six classes in `tests/test_pawpal.py`:
+
+| Class | # Tests | Covers |
+|---|---|---|
+| `TestTaskCompletion` | 1 | `mark_complete()` flips `completed` from False to True |
+| `TestTaskAddition` | 2 | Adding tasks to a pet increases count; all tasks are stored and retrievable |
+| `TestRecurringTasks` | 2 | Daily task completion creates next occurrence due tomorrow; weekly creates next due in 7 days |
+| `TestSortingByTime` | 4 | Chronological HH:MM ordering; empty list; single task; identical times preserve all entries |
+| `TestConflictDetection` | 4 | No conflicts returns `[]`; same-pet conflict warning; cross-pet conflict warning; owner with no pets |
+| `TestSchedulingHappyPaths` | 3 | All tasks fit; required task is placed first; plan starts at configured `start_hour` |
+| `TestSchedulingEdgeCases` | 6 | Zero tasks; optional tasks skipped when over time limit; required tasks always scheduled even over limit; `once` recurrence returns None; unknown pet name filter returns `[]`; same-named tasks on different pets don't interfere |
+
+The tests also caught a real bug during development: `DailyPlan.add_item()` was incorrectly moving required tasks to `skipped_tasks` when the available time was low. The fix ensures required tasks bypass the time check entirely.
+
+### Confidence level
+
+5 stars
+
+The scheduler's core logic (priority ranking, greedy selection, recurrence, sorting, filtering, and conflict detection) is fully covered by deterministic unit tests passing at 22/22. The star deduction reflects two gaps that remain: the Streamlit UI layer has no automated tests (UI behavior requires manual verification), and the scheduler assumes owners supply feasible required-task sets; if required tasks alone exceed available time, the plan technically becomes invalid but is still generated without a user-facing warning.

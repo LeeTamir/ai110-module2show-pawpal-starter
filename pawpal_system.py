@@ -126,7 +126,7 @@ class DailyPlan:
 
     def add_item(self, item: PlanItem) -> None:
         """Add a plan item or move it to skipped tasks if it does not fit."""
-        if item.task.duration_minutes > self.remaining_minutes():
+        if not item.task.required and item.task.duration_minutes > self.remaining_minutes():
             self.skipped_tasks.append(item.task)
             return
         self.items.append(item)
