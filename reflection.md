@@ -98,8 +98,15 @@ classDiagram
 
 **b. Design changes**
 
-- Did your design change during implementation?
-- If yes, describe at least one change and why you made it.
+- Yes, I made three key changes during the skeleton phase before implementation:
+
+  1. **Added pets collection to Owner.** The UML showed Owner "1" → "1..*" Pet, but the Owner class had no way to hold pets. This would have forced the scheduler to receive owner and pet as separate, disconnected parameters. I added a `pets: list[Pet]` field and methods `add_pet()`, `remove_pet()`, and `get_pets()` to enforce the 1-to-many relationship properly.
+  
+  2. **Time validation and overflow handling in DailyPlan.** I realized `add_item()` was blindly appending tasks without checking if they fit in remaining time. I updated it to check `remaining_minutes()` and automatically move tasks that don't fit into `skipped_tasks`. This ensures the scheduler never overschedules a day.
+  
+  3. **Added plan validation method.** I created `is_valid_plan()` to verify two invariants: total scheduled time ≤ available time, and no required tasks are skipped. This gives the scheduler a way to check its own work and the UI a way to ensure the plan is sound before displaying it.
+
+- Without Owner owning its pets, time overflow protection, and plan validation, the scheduler would have had to handle all these concerns itself, duplicating logic and making testing harder. Moving these checks into the data objects makes each class responsible for its own constraints.
 
 ---
 
@@ -107,13 +114,18 @@ classDiagram
 
 **a. Constraints and priorities**
 
-- What constraints does your scheduler consider (for example: time, priority, preferences)?
-- How did you decide which constraints mattered most?
+- My scheduler considers three constraints:
+  1. **Time availability** – All selected tasks must fit within the owner's `daily_time_available` (in minutes).
+  2. **Task priority** – Tasks are ranked by priority level: required tasks first, then high/medium/low priority.
+  3. **Owner preferences** – Tasks check `matches_preferences()` against owner preferences (e.g., preferred time of day), used in reasoning but not as a hard filter.
+
+- I decided time and priority were non-negotiable because the README explicitly calls for a scheduler that respects constraints and priorities. Owner preferences influence explanation text but don't prevent scheduling. This prioritization keeps the logic simple: the scheduler makes greedy decisions rather than trying to optimize multiple competing goals.
 
 **b. Tradeoffs**
 
-- Describe one tradeoff your scheduler makes.
-- Why is that tradeoff reasonable for this scenario?
+- **Greedy selection over optimization.** My scheduler uses a greedy algorithm: rank tasks by priority, then pack them into available time in order. This is simple, fast, and predictable, but it doesn't optimize globally. For example, if two medium-priority tasks take 50 minutes total, but three low-priority tasks take 45 minutes, the greedy approach picks the medium tasks and skips the low ones. An optimal scheduler might pick the low tasks instead to maximize task count or owner satisfaction.
+
+- **Why this tradeoff is reasonable:** PawPal+ is a personal assistant, not a professional scheduler. The owner benefits from a clear, understandable strategy  more than from perfect global optimization. Greedy selection also keeps the code testable since the ranking is deterministic, and the UI can explain each decision clearly. If requirements change to "maximize task count" or "balance variety," the tradeoff becomes a real problem and we'd revisit it.
 
 ---
 
