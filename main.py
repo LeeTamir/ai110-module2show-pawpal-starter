@@ -42,6 +42,7 @@ def main():
             category="exercise",
             duration_minutes=20,
             priority="high",
+            time="07:30",
             preferred_time="morning",
             required=True
         ),
@@ -50,19 +51,22 @@ def main():
             category="feeding",
             duration_minutes=10,
             priority="high",
+            time="18:00",
             required=True
         ),
         CareTask(
             title="Playtime",
             category="enrichment",
             duration_minutes=30,
-            priority="medium"
+            priority="medium",
+            time="18:00",
         ),
         CareTask(
             title="Grooming",
             category="grooming",
             duration_minutes=25,
-            priority="low"
+            priority="low",
+            time="09:45",
         )
     ]
     
@@ -73,6 +77,7 @@ def main():
             category="feeding",
             duration_minutes=10,
             priority="high",
+            time="18:00",
             required=True
         ),
         CareTask(
@@ -80,15 +85,21 @@ def main():
             category="hygiene",
             duration_minutes=5,
             priority="high",
+            time="07:15",
             required=True
         ),
         CareTask(
             title="Interactive play",
             category="enrichment",
             duration_minutes=15,
-            priority="medium"
+            priority="medium",
+            time="19:30",
         )
     ]
+
+    # Mark a couple of tasks complete to demonstrate completion filtering.
+    dog_tasks[1].mark_complete()
+    cat_tasks[0].mark_complete()
     
     # Add tasks to pets
     for task in dog_tasks:
@@ -99,6 +110,39 @@ def main():
     
     # Create scheduler and generate plans
     scheduler = Scheduler(start_hour=8)
+
+    print("\nTask Sorting + Filtering Demo")
+    print("-" * 60)
+    print("Dog tasks (input order):")
+    for task in dog.get_tasks():
+        status = "done" if task.completed else "pending"
+        print(f"  - {task.time} | {task.title} | {status}")
+
+    print("\nDog tasks (sorted by HH:MM time using lambda key):")
+    for task in scheduler.sort_tasks_by_time(dog.get_tasks()):
+        status = "done" if task.completed else "pending"
+        print(f"  - {task.time} | {task.title} | {status}")
+
+    completed_tasks = scheduler.filter_tasks(owner, completed=True)
+    mochi_pending_tasks = scheduler.filter_tasks(owner, completed=False, pet_name="Mochi")
+
+    print("\nFiltered tasks (completed=True, all pets):")
+    for task in completed_tasks:
+        print(f"  - {task.title} at {task.time}")
+
+    print("\nFiltered tasks (completed=False, pet='Mochi'):")
+    for task in mochi_pending_tasks:
+        print(f"  - {task.title} at {task.time}")
+
+    conflict_warnings = scheduler.detect_time_conflicts(owner)
+    print("\nConflict warnings:")
+    if conflict_warnings:
+        for warning in conflict_warnings:
+            print(f"  ! {warning}")
+    else:
+        print("  None")
+
+    print("-" * 60)
     
     print("=" * 60)
     print("PawPal+ - Today's Schedule")
@@ -132,7 +176,8 @@ def main():
             print(f"\nSkipped Tasks ({len(plan.skipped_tasks)}):")
             for task in plan.skipped_tasks:
                 print(
-                    f"  • {task.title} ({task.duration_minutes} min, {task.priority} priority)"
+                    f"  • {task.title} at {task.time} "
+                    f"({task.duration_minutes} min, {task.priority} priority)"
                 )
         
         # Display plan summary

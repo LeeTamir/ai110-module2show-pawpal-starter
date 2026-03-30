@@ -41,3 +41,43 @@ pip install -r requirements.txt
 5. Add tests to verify key behaviors.
 6. Connect your logic to the Streamlit UI in `app.py`.
 7. Refine UML so it matches what you actually built.
+
+---
+
+## Smarter Scheduling
+
+Beyond the core plan generator, `pawpal_system.py` includes several features that make the scheduler more realistic and robust.
+
+### Priority-ranked task selection
+
+Tasks are sorted before scheduling using a two-level key: required tasks are always placed first, then optional tasks are ordered high → medium → low. The greedy selection pass fills available time in that ranked order, so the most critical care always makes it into the plan.
+
+### Task recurrence with `timedelta`
+
+`CareTask` supports a `frequency` field (`"once"`, `"daily"`, `"weekly"`). Calling `Scheduler.mark_task_complete()` on a recurring task automatically creates the next occurrence with a due date calculated using Python's `timedelta`:
+
+- Daily → due date + 1 day
+- Weekly → due date + 7 days
+
+This removes the need for the owner to manually re-enter repeating tasks.
+
+### Time-based sorting
+
+`Scheduler.sort_tasks_by_time()` uses a lambda key to sort any list of tasks by their `HH:MM` time string in chronological order — useful for displaying a human-readable day view independent of how tasks were entered.
+
+### Filtering by completion and pet
+
+`Scheduler.filter_tasks()` accepts optional `completed` and `pet_name` arguments and returns only the tasks that match. This makes it easy to show "what still needs to be done today" or "all of Mochi's pending tasks" without modifying the underlying data.
+
+### Conflict detection
+
+`Scheduler.detect_time_conflicts()` scans every task across all pets for shared `HH:MM` start times and returns a list of warning strings — one per conflict. It distinguishes same-pet conflicts from cross-pet conflicts and never raises an exception, leaving the resolution decision to the owner.
+
+### Validated plan output
+
+`DailyPlan.is_valid_plan()` enforces two invariants after scheduling:
+
+- Total scheduled time does not exceed available minutes.
+- No required task appears in the skipped list.
+
+This gives both the UI and tests a single method to call for a correctness check.

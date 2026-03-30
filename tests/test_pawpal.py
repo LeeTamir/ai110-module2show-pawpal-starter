@@ -8,6 +8,7 @@ Tests verify critical behaviors:
 """
 
 import pytest
+from datetime import date, timedelta
 from pawpal_system import Owner, Pet, CareTask, Scheduler
 
 
@@ -95,6 +96,64 @@ class TestTaskAddition:
         # Verify task titles match
         titles = [t.title for t in pet_tasks]
         assert titles == ["Feeding", "Litter cleaning", "Play"]
+
+
+class TestRecurringTasks:
+    """Tests for recurring task completion behavior."""
+
+    def test_daily_completion_creates_task_due_tomorrow(self):
+        """Verify daily completion auto-creates next task due the next day."""
+        scheduler = Scheduler()
+        pet = Pet(name="Mochi", species="dog")
+        task = CareTask(
+            title="Daily medication",
+            category="medication",
+            duration_minutes=5,
+            priority="high",
+            frequency="daily",
+            due_date=date(2026, 3, 30),
+        )
+        pet.add_task(task)
+
+        next_task = scheduler.mark_task_complete(
+            pet=pet,
+            task_title="Daily medication",
+            completed_on=date(2026, 3, 30),
+        )
+
+        assert next_task is not None
+        assert task.completed is True
+        assert next_task.completed is False
+        assert next_task.frequency == "daily"
+        assert next_task.due_date == date(2026, 3, 31)
+        assert len(pet.get_tasks()) == 2
+
+    def test_weekly_completion_creates_task_due_in_seven_days(self):
+        """Verify weekly completion auto-creates next task due in seven days."""
+        scheduler = Scheduler()
+        pet = Pet(name="Luna", species="cat")
+        completion_day = date(2026, 3, 30)
+        task = CareTask(
+            title="Weekly grooming",
+            category="grooming",
+            duration_minutes=20,
+            priority="medium",
+            frequency="weekly",
+            due_date=completion_day,
+        )
+        pet.add_task(task)
+
+        next_task = scheduler.mark_task_complete(
+            pet=pet,
+            task_title="Weekly grooming",
+            completed_on=completion_day,
+        )
+
+        assert next_task is not None
+        assert task.completed is True
+        assert next_task.frequency == "weekly"
+        assert next_task.due_date == completion_day + timedelta(days=7)
+        assert len(pet.get_tasks()) == 2
 
 
 if __name__ == "__main__":

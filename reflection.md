@@ -114,18 +114,20 @@ classDiagram
 
 **a. Constraints and priorities**
 
-- My scheduler considers three constraints:
+- My scheduler considers five constraints:
   1. **Time availability** – All selected tasks must fit within the owner's `daily_time_available` (in minutes).
-  2. **Task priority** – Tasks are ranked by priority level: required tasks first, then high/medium/low priority.
-  3. **Owner preferences** – Tasks check `matches_preferences()` against owner preferences (e.g., preferred time of day), used in reasoning but not as a hard filter.
+  2. **Task priority** – Tasks are ranked by priority level: required tasks first, then high/medium/low. Required tasks are always scheduled regardless of fit.
+  3. **Owner preferences** – Tasks check `matches_preferences()` against owner preferences (e.g., preferred time of day), used in reasoning text but not as a hard filter.
+  4. **Task recurrence** – Daily and weekly tasks auto-generate a next occurrence on completion using `timedelta`, so the scheduler always has an up-to-date task list without manual re-entry.
+  5. **Time conflict detection** – `detect_time_conflicts()` scans tasks across all pets for shared `HH:MM` times and returns warning messages rather than crashing, allowing the owner to decide how to resolve overlaps.
 
-- I decided time and priority were non-negotiable because the README explicitly calls for a scheduler that respects constraints and priorities. Owner preferences influence explanation text but don't prevent scheduling. This prioritization keeps the logic simple: the scheduler makes greedy decisions rather than trying to optimize multiple competing goals.
+- Time and priority are non-negotiable because the README explicitly requires them. Recurrence and conflict detection were added because a realistic daily care routine involves repeating tasks and a single owner managing multiple pets at once. Owner preferences remain soft constraints to keep the scheduler predictable and explainable.
 
 **b. Tradeoffs**
 
-- **Greedy selection over optimization.** My scheduler uses a greedy algorithm: rank tasks by priority, then pack them into available time in order. This is simple, fast, and predictable, but it doesn't optimize globally. For example, if two medium-priority tasks take 50 minutes total, but three low-priority tasks take 45 minutes, the greedy approach picks the medium tasks and skips the low ones. An optimal scheduler might pick the low tasks instead to maximize task count or owner satisfaction.
+- **Greedy selection over global optimization.** The scheduler ranks tasks by priority, then packs them into available time in order. This is predictable and testable, but not globally optimal. For example, two medium-priority tasks taking 50 minutes will be chosen over three low-priority tasks taking 45 minutes, even if fitting the low-priority tasks would complete more care goals. An optimal solver could find a better set, but at the cost of much greater complexity and harder-to-explain decisions.
 
-- **Why this tradeoff is reasonable:** PawPal+ is a personal assistant, not a professional scheduler. The owner benefits from a clear, understandable strategy  more than from perfect global optimization. Greedy selection also keeps the code testable since the ranking is deterministic, and the UI can explain each decision clearly. If requirements change to "maximize task count" or "balance variety," the tradeoff becomes a real problem and we'd revisit it.
+- **Why this tradeoff is reasonable:** PawPal+ is a personal assistant where owner trust and transparency matter more than mathematical optimization. Greedy selection means the owner can always predict which tasks will be chosen, and the UI can explain every decision clearly. If requirements change to "maximize task count" or "balance variety across categories," this tradeoff would need revisiting.
 
 ---
 

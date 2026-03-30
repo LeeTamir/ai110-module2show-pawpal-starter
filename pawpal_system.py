@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 
 
 @dataclass
@@ -37,9 +38,12 @@ class CareTask:
     category: str
     duration_minutes: int
     priority: str
+    time: str = "09:00"
     preferred_time: str = "anytime"
     required: bool = False
     completed: bool = False
+    frequency: str = "once"
+    due_date: date = field(default_factory=date.today)
 
     def is_high_priority(self) -> bool:
         """Return True when the task priority is high."""
@@ -55,6 +59,29 @@ class CareTask:
     def mark_complete(self) -> None:
         """Mark the task as completed."""
         self.completed = True
+
+    def create_next_occurrence(self, base_date: date | None = None) -> CareTask | None:
+        """Create the next recurring task instance for daily or weekly frequencies."""
+        frequency = self.frequency.lower()
+        if frequency not in {"daily", "weekly"}:
+            return None
+
+        recurrence_days = 1 if frequency == "daily" else 7
+        start_date = base_date or self.due_date
+        next_due_date = start_date + timedelta(days=recurrence_days)
+
+        return CareTask(
+            title=self.title,
+            category=self.category,
+            duration_minutes=self.duration_minutes,
+            priority=self.priority,
+            time=self.time,
+            preferred_time=self.preferred_time,
+            required=self.required,
+            completed=False,
+            frequency=self.frequency,
+            due_date=next_due_date,
+        )
 
 
 @dataclass
@@ -167,10 +194,12 @@ class Scheduler:
             plan.add_item(item)
             current_minutes += task.duration_minutes
         
-        # Any unscheduled tasks are collected in skipped_tasks by add_item overflow logic
-        # Add tasks that didn't fit
+# Use identity sets to find unscheduled tasks in a single linear pass,
+        # avoiding repeated scans and title-collision false matches.
+        scheduled_ids = {id(item.task) for item in plan.items}
+        skipped_ids = {id(task) for task in plan.skipped_tasks}
         for task in tasks:
-            if not any(item.task.title == task.title for item in plan.items) and task not in plan.skipped_tasks:
+            if id(task) not in scheduled_ids and id(task) not in skipped_ids:
                 plan.skipped_tasks.append(task)
         
         return plan
@@ -225,6 +254,79 @@ class Scheduler:
                 reasons.append(f"{preferred_time} preferred")
         
         return " | ".join(reasons) if reasons else "fits in schedule"
+
+    def sort_tasks_by_time(self, tasks: list[CareTask]) -> list[CareTask]:
+        """Return tasks sorted by HH:MM time using a lambda sort key."""
+        return sorted(tasks, key=lambda task: task.time)
+
+    def filter_tasks(
+        self,
+        owner: Owner,
+        completed: bool | None = None,
+        pet_name: str | None = None,
+    ) -> list[CareTask]:
+        """Return owner tasks filtered by optional completion status and pet name."""
+        pets = owner.get_pets()
+        if pet_name is not None:
+            pets = [pet for pet in pets if pet.name.lower() == pet_name.lower()]
+
+        filtered_tasks: list[CareTask] = []
+        for pet in pets:
+            for task in pet.get_tasks():
+                if completed is None or task.completed == completed:
+                    filtered_tasks.append(task)
+
+        return filtered_tasks
+
+    def mark_task_complete(
+        self,
+        pet: Pet,
+        task_title: str,
+        completed_on: date | None = None,
+    ) -> CareTask | None:
+        """Mark a pet task complete and create its next daily or weekly occurrence."""
+        completed_on = completed_on or date.today()
+
+        for task in pet.tasks:
+            if task.title != task_title or task.completed:
+                continue
+
+            task.mark_complete()
+            next_task = task.create_next_occurrence(base_date=completed_on)
+            if next_task is not None:
+                pet.add_task(next_task)
+            return next_task
+
+        return None
+
+    def detect_time_conflicts(self, owner: Owner) -> list[str]:
+        """Return warning messages for tasks sharing the same HH:MM time."""
+        tasks_by_time: dict[str, list[tuple[str, str]]] = {}
+
+        for pet in owner.get_pets():
+            for task in pet.get_tasks():
+                tasks_by_time.setdefault(task.time, []).append((pet.name, task.title))
+
+        warnings: list[str] = []
+        for time_value, entries in sorted(tasks_by_time.items(), key=lambda item: item[0]):
+            if len(entries) < 2:
+                continue
+
+            pet_names = {pet_name for pet_name, _ in entries}
+            entry_text = ", ".join(
+                f"{pet_name}: {task_title}" for pet_name, task_title in entries
+            )
+
+            if len(pet_names) == 1:
+                warnings.append(
+                    f"Time conflict at {time_value} for pet {next(iter(pet_names))}: {entry_text}."
+                )
+            else:
+                warnings.append(
+                    f"Cross-pet conflict at {time_value}: {entry_text}."
+                )
+
+        return warnings
 
     def _minutes_to_time(self, minutes: int) -> str:
         """Convert minutes since midnight into HH:MM 24-hour format."""
